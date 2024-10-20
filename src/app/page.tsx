@@ -1,95 +1,82 @@
-import Image from "next/image";
-import styles from "./page.module.css";
+/* eslint-disable @typescript-eslint/no-unused-vars */
+// src/app/page.tsx
+"use client";
+import React, { useState } from "react";
+import useSWR from "swr";
+import { Container, Typography } from "@mui/material";
+import ArtworkList from "./components/ArtworkList";
+import PaginationCount from "./components/pagination";
 
-export default function Home() {
-  return (
-    <div className={styles.page}>
-      <main className={styles.main}>
-        <Image
-          className={styles.logo}
-          src="https://nextjs.org/icons/next.svg"
-          alt="Next.js logo"
-          width={180}
-          height={38}
-          priority
-        />
-        <ol>
-          <li>
-            Get started by editing <code>src/app/page.tsx</code>.
-          </li>
-          <li>Save and see your changes instantly.</li>
-        </ol>
+// フェッチャー関数を定義
+const fetcher = (url: string) => fetch(url).then((res) => res.json());
 
-        <div className={styles.ctas}>
-          <a
-            className={styles.primary}
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className={styles.logo}
-              src="https://nextjs.org/icons/vercel.svg"
-              alt="Vercel logomark"
-              width={20}
-              height={20}
-            />
-            Deploy now
-          </a>
-          <a
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-            className={styles.secondary}
-          >
-            Read our docs
-          </a>
-        </div>
-      </main>
-      <footer className={styles.footer}>
-        <a
-          href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="https://nextjs.org/icons/file.svg"
-            alt="File icon"
-            width={16}
-            height={16}
-          />
-          Learn
-        </a>
-        <a
-          href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="https://nextjs.org/icons/window.svg"
-            alt="Window icon"
-            width={16}
-            height={16}
-          />
-          Examples
-        </a>
-        <a
-          href="https://nextjs.org?utm_source=create-next-app&utm_medium=appdir-template&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="https://nextjs.org/icons/globe.svg"
-            alt="Globe icon"
-            width={16}
-            height={16}
-          />
-          Go to nextjs.org →
-        </a>
-      </footer>
-    </div>
+const HomePage = () => {
+  const [currentPage, setCurrentPage] = useState<number>(1);
+  const itemsPerPage = 9;
+
+  // 最初のAPIリクエストで絵画IDを取得
+  const { data, error, isLoading } = useSWR(
+    "https://collectionapi.metmuseum.org/public/collection/v1/objects?departmentIds=11",
+    fetcher
   );
-}
+
+  // 絵画IDの取得が完了した場合にのみ絵画の詳細を取得
+  const artworkIds = data?.objectIDs.slice(0, 100) || [];
+
+  // 絵画の詳細情報を個別に取得する関数
+  const fetchArtworkDetailsList = async () => {
+    const promises = artworkIds.map(async (id: number) => {
+      const response = await fetch(
+        `https://collectionapi.metmuseum.org/public/collection/v1/objects/${id}`
+      );
+      if (!response.ok) throw new Error("Artwork fetch failed");
+      return response.json();
+    });
+    const fetchedArtworks = await Promise.all(promises);
+    return fetchedArtworks.filter(
+      (artwork) => artwork.artistNationality === "Italian"
+    );
+  };
+
+  // useSWRを使って絵画詳細情報の取得を行う
+  const {
+    data: artworks,
+    error: artworksError,
+    isLoading: artworksLoading,
+  } = useSWR(
+    artworkIds.length > 0 ? "fetchArtworkDetailsList" : null, // フェッチャーが null の場合はフェッチを行わない
+    artworkIds.length > 0 ? fetchArtworkDetailsList : null
+  );
+
+  if (artworksError) {
+    return (
+      <Typography color="error">絵画の詳細取得に失敗しました。</Typography>
+    );
+  }
+
+  const handlePageChange = (page: number) => {
+    setCurrentPage(page);
+  };
+
+  return (
+    <Container maxWidth="lg">
+      <Typography variant="h4" component="h1" gutterBottom>
+        Metropolitan Museum of Art Gallery
+      </Typography>
+      <ArtworkList
+        artworks={artworks || []}
+        loading={artworksLoading || !artworks}
+        itemsPerPage={itemsPerPage}
+        currentPage={currentPage}
+      />
+      <PaginationCount
+        totalItems={artworks?.length || 0}
+        itemsPerPage={itemsPerPage}
+        currentPage={currentPage}
+        onPageChange={handlePageChange}
+      />
+    </Container>
+  );
+};
+
+export default HomePage;
